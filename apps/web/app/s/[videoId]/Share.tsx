@@ -8,6 +8,7 @@ import { startTransition, use, useCallback, useMemo, useOptimistic, useRef, useS
 import { ShareVideo } from "./_components/ShareVideo";
 import { Sidebar } from "./_components/Sidebar";
 import { Toolbar } from "./_components/Toolbar";
+import { StatusGate } from "@/app/components/StatusGate";  // 👈 nuovo import
 
 const formatTime = (time: number) => {
   const minutes = Math.floor(time / 60);
@@ -70,17 +71,17 @@ const useVideoStatus = (
     },
     initialData: initialData
       ? {
-        transcriptionStatus: initialData.transcriptionStatus as
-          | "PROCESSING"
-          | "COMPLETE"
-          | "ERROR"
-          | null,
-        aiProcessing: initialData.aiData?.processing || false,
-        aiTitle: initialData.aiData?.title || null,
-        summary: initialData.aiData?.summary || null,
-        chapters: initialData.aiData?.chapters || null,
-        generationError: null,
-      }
+          transcriptionStatus: initialData.transcriptionStatus as
+            | "PROCESSING"
+            | "COMPLETE"
+            | "ERROR"
+            | null,
+          aiProcessing: initialData.aiData?.processing || false,
+          aiTitle: initialData.aiData?.title || null,
+          summary: initialData.aiData?.summary || null,
+          chapters: initialData.aiData?.chapters || null,
+          generationError: null,
+        }
       : undefined,
     refetchInterval: (query) => {
       const data = query.state.data;
@@ -227,14 +228,17 @@ export const Share = ({
             <div
               className="absolute inset-3 w-[calc(100%-1.5rem)] h-[calc(100%-1.5rem)] overflow-hidden rounded-xl"
             >
-              <ShareVideo
-                data={{ ...data, transcriptionStatus }}
-                user={user}
-                comments={comments}
-                chapters={aiData?.chapters || []}
-                aiProcessing={aiData?.processing || false}
-                ref={playerRef}
-              />
+              {/* 👇 wrapper aggiunto */}
+              <StatusGate videoId={data.id}>
+                <ShareVideo
+                  data={{ ...data, transcriptionStatus }}
+                  user={user}
+                  comments={comments}
+                  chapters={aiData?.chapters || []}
+                  aiProcessing={aiData?.processing || false}
+                  ref={playerRef}
+                />
+              </StatusGate>
             </div>
           </div>
           <div className="mt-4 lg:hidden">
@@ -286,6 +290,7 @@ export const Share = ({
           (transcriptionStatus === "PROCESSING" ||
             transcriptionStatus === "COMPLETE") && (
             <div className="p-4 animate-pulse new-card-style">
+              {/* Skeleton UI durante AI processing */}
               <div className="space-y-6">
                 <div>
                   <div className="mb-3 w-24 h-6 bg-gray-200 rounded"></div>
@@ -354,6 +359,6 @@ export const Share = ({
             </div>
           )}
       </div>
-    </div >
+    </div>
   );
 };
