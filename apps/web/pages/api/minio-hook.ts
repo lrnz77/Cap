@@ -1,46 +1,100 @@
-// apps/web/pages/api/minio-hook.ts
+// pages/api/minio-hook.ts
 import type { NextApiRequest, NextApiResponse } from "next";
 import mysql from "mysql2/promise";
 
-const TOKEN = process.env.MINIO_WEBHOOK_TOKEN || "";
+/**
+ * Webhook MinIO → Capso
+ * - Verifica token (?token=...).
+ * - Estrae videoId dal key S3 (es: "cc28vrbz8kb3y0c/result.mp4").
+ * - Aggiorna DB: videos.jobStatus = 'ready' dove id = videoId.
+ * - Idempotente: eseguire più volte non crea problemi.
+ */
+
+const pool = mysql.createPool(process.env.DATABASE_URL!);
+
+type MinioRecord = {
+  eventName?: string;
+  s3?: {
+    bucket?: { name?: string };
+    object?: { key?: string };
+  };
+};
+
+export const config = {
+  api: {
+    // manteniamo il parser di default (JSON)
+    bodyParser: true,
+    externalResolver: true,
+  },
+};
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
-  if ((req.query.token as string) !== TOKEN) return res.status(401).json({ error: "unauthorized" });
+  // Health check semplice
+  if (req.method === "GET") {
+    return res.status(200).json({ ok: true, message: "minio-hook up" });
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
+  // 🔐 Auth via token querystring
+  const { token } = req.query;
+  if (!process.env.MINIO_WEBHOOK_TOKEN) {
+    return res.status(500).json({ error: "Server token not configured" });
+  }
+  if (token !== process.env.MINIO_WEBHOOK_TOKEN) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
 
   try {
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const rec = body?.Records?.[0];
-    if (!rec) return res.status(400).json({ error: "no-records" });
-
-    const event = String(rec.eventName || "");
-    const bucket = rec?.s3?.bucket?.name as string;
-    const objectKeyRaw = rec?.s3?.object?.key || "";
-    const objectKey = decodeURIComponent(objectKeyRaw);
-
-    // Consideriamo PRONTO solo al termine upload (put o multipart complete)
-    const isComplete = event.includes("ObjectCreated:Put") || event.includes("CompleteMultipartUpload");
-    if (!isComplete || bucket !== "cap-uploads" || !objectKey) {
-      return res.status(200).json({ ignored: true, event, bucket, objectKey });
+    const records: MinioRecord[] = (req.body && (req.body.Records as MinioRecord[])) || [];
+    if (!Array.isArray(records) || records.length === 0) {
+      return res.status(400).json({ error: "Invalid payload: missing Records" });
     }
 
-    // es: pdc7qg8qrqj1r1k/qualcosa/result.mp4 -> prende "pdc7qg8qrqj1r1k"
-    const videoId = objectKey.split("/")[0];
-    if (!videoId || videoId.length < 8) {
-      return res.status(200).json({ ignored: true, reason: "no videoId", objectKey });
+    // Gestiamo il primo record (MinIO invia 1 alla volta per put/copymultipart)
+    const rec = records[0];
+    const rawKey = rec?.s3?.object?.key || "";
+    if (!rawKey) {
+      return res.status(400).json({ error: "Invalid payload: missing object.key" });
     }
 
-    // Connessione MySQL usando DATABASE_URL (quella che hai già)
-    const pool = await mysql.createPool(process.env.DATABASE_URL as string);
-    const [r] = await pool.execute(
-      `UPDATE videos SET jobStatus='ready', updatedAt=NOW() WHERE id=? LIMIT 1`,
+    // Key può essere url-encoded (spazi, %2F, ecc.)
+    const key = safeDecode(rawKey);
+
+    // Atteso: "<videoId>/result.mp4" (eventuali sottocartelle sono ok: "<videoId>/.../result.mp4")
+    const videoId = key.split("/")[0];
+    if (!videoId) {
+      return res.status(400).json({ error: "Unable to extract videoId from key", key });
+    }
+
+    // Aggiorna stato → 'ready'
+    // (se vuoi anche aggiornare updatedAt lato DB, aggiungi ", updatedAt = NOW()" alla query)
+    const [result] = await pool.query(
+      "UPDATE `videos` SET `jobStatus` = 'ready' WHERE `id` = ?",
       [videoId]
     );
-    await pool.end();
 
-    return res.status(200).json({ ok: true, updated: (r as any).affectedRows, videoId, event });
-  } catch (e: any) {
-    console.error("minio-hook error", e?.message);
-    return res.status(500).json({ error: "internal" });
+    // Log minimale server-side
+    // console.log("HOOK hit", { key, videoId, event: rec?.eventName });
+
+    return res.status(200).json({
+      ok: true,
+      videoId,
+      key,
+    });
+  } catch (err: any) {
+    console.error("Errore nel webhook MinIO:", err?.message || err);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
+
+/** Decodifica sicura senza far esplodere la route per malformed encodings */
+function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s.replace(/\+/g, " "));
+  } catch {
+    return s;
   }
 }
