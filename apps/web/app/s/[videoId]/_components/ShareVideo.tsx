@@ -22,6 +22,9 @@ import { parseVTT } from "./utils/transcript-utils";
 import { CapVideoPlayer } from "./CapVideoPlayer";
 import { HLSVideoPlayer } from "./HLSVideoPlayer";
 
+// ⬇️ IMPORTA IL GATE
+import StatusGate from "@/app/components/StatusGate";
+
 declare global {
   interface Window {
     MSStream: any;
@@ -78,18 +81,11 @@ export const ShareVideo = forwardRef<
       const blob = new Blob([vttContent], { type: "text/vtt" });
       const newUrl = URL.createObjectURL(blob);
 
-      // Clean up previous URL
-      if (subtitleUrl) {
-        URL.revokeObjectURL(subtitleUrl);
-      }
-
+      if (subtitleUrl) URL.revokeObjectURL(subtitleUrl);
       setSubtitleUrl(newUrl);
 
-      return () => {
-        URL.revokeObjectURL(newUrl);
-      };
+      return () => URL.revokeObjectURL(newUrl);
     } else {
-      // Clean up if no longer needed
       if (subtitleUrl) {
         URL.revokeObjectURL(subtitleUrl);
         setSubtitleUrl(null);
@@ -104,18 +100,11 @@ export const ShareVideo = forwardRef<
       const blob = new Blob([vttContent], { type: "text/vtt" });
       const newUrl = URL.createObjectURL(blob);
 
-      // Clean up previous URL
-      if (chaptersUrl) {
-        URL.revokeObjectURL(chaptersUrl);
-      }
-
+      if (chaptersUrl) URL.revokeObjectURL(chaptersUrl);
       setChaptersUrl(newUrl);
 
-      return () => {
-        URL.revokeObjectURL(newUrl);
-      };
+      return () => URL.revokeObjectURL(newUrl);
     } else {
-      // Clean up if no longer needed
       if (chaptersUrl) {
         URL.revokeObjectURL(chaptersUrl);
         setChaptersUrl(null);
@@ -130,7 +119,6 @@ export const ShareVideo = forwardRef<
 
   if (data.source.type === "desktopMP4") {
     videoSrc = `/api/playlist?userId=${data.ownerId}&videoId=${data.id}&videoType=mp4`;
-    // Start with CORS enabled for desktopMP4, but CapVideoPlayer will dynamically disable if needed
     enableCrossOrigin = true;
   } else if (
     NODE_ENV === "development" ||
@@ -146,26 +134,29 @@ export const ShareVideo = forwardRef<
 
   return (
     <>
-      <div className="relative h-full">
-        {data.source.type === "desktopMP4" ? (
-          <CapVideoPlayer
-            mediaPlayerClassName="w-full h-full max-w-full max-h-full rounded-xl"
-            videoSrc={videoSrc}
-            chaptersSrc={chaptersUrl || ""}
-            captionsSrc={subtitleUrl || ""}
-            videoRef={videoRef}
-            enableCrossOrigin={enableCrossOrigin}
-          />
-        ) : (
-          <HLSVideoPlayer
-            mediaPlayerClassName="w-full h-full max-w-full max-h-full rounded-xl"
-            videoSrc={videoSrc}
-            chaptersSrc={chaptersUrl || ""}
-            captionsSrc={subtitleUrl || ""}
-            videoRef={videoRef}
-          />
-        )}
-      </div>
+      {/* ⬇️ WRAP con StatusGate: se non è ready mostra il loader; quando diventa ready mostra il player */}
+      <StatusGate videoId={data.id}>
+        <div className="relative h-full">
+          {data.source.type === "desktopMP4" ? (
+            <CapVideoPlayer
+              mediaPlayerClassName="w-full h-full max-w-full max-h-full rounded-xl"
+              videoSrc={videoSrc}
+              chaptersSrc={chaptersUrl || ""}
+              captionsSrc={subtitleUrl || ""}
+              videoRef={videoRef}
+              enableCrossOrigin={enableCrossOrigin}
+            />
+          ) : (
+            <HLSVideoPlayer
+              mediaPlayerClassName="w-full h-full max-w-full max-h-full rounded-xl"
+              videoSrc={videoSrc}
+              chaptersSrc={chaptersUrl || ""}
+              captionsSrc={subtitleUrl || ""}
+              videoRef={videoRef}
+            />
+          )}
+        </div>
+      </StatusGate>
 
       {!userIsPro(user) && (
         <div className="absolute top-4 left-4 z-30">
@@ -180,7 +171,6 @@ export const ShareVideo = forwardRef<
               <div className="opacity-50 transition-opacity hover:opacity-100 peer">
                 <Logo className="w-auto h-4 sm:h-8" white={true} />
               </div>
-
               <div className="absolute left-0 top-8 transition-transform duration-300 ease-in-out origin-top scale-y-0 peer-hover:scale-y-100">
                 <p className="text-white text-xs font-medium whitespace-nowrap bg-black bg-opacity-50 px-2 py-0.5 rounded">
                   Remove watermark
