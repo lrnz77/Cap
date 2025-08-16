@@ -23,7 +23,7 @@ import { CapVideoPlayer } from "./CapVideoPlayer";
 import { HLSVideoPlayer } from "./HLSVideoPlayer";
 
 // ⬇️ IMPORTA IL GATE
-import StatusGate from "@/app/components/StatusGate";
+import StatusGate from "./StatusGate";
 
 declare global {
   interface Window {
