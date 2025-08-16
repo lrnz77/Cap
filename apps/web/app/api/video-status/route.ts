@@ -2,16 +2,15 @@
 import { NextResponse } from "next/server";
 import mysql from "mysql2/promise";
 
-// Pool MySQL (riusa le ENV del webhook)
-const pool = mysql.createPool({
-  host: process.env.DB_HOST!,
-  user: process.env.DB_USER!,
-  password: process.env.DB_PASSWORD!,
-  database: process.env.DB_NAME!,
-  waitForConnections: true,
-  connectionLimit: 5,
-  queueLimit: 0,
-});
+// usa direttamente la stringa di connessione DATABASE_URL
+// es: mysql://user:pass@host:3306/dbname
+const url = process.env.DATABASE_URL!;
+if (!url) {
+  console.error("Missing DATABASE_URL env");
+}
+
+// mysql2 accetta la connection string direttamente
+const pool = mysql.createPool(url);
 
 export async function GET(req: Request) {
   try {
@@ -31,16 +30,15 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const ready = video.jobStatus === "ready";
     return NextResponse.json({
       ok: true,
       id: video.id,
       jobStatus: video.jobStatus,
-      ready,
+      ready: video.jobStatus === "ready",
       updatedAt: video.updatedAt,
     });
-  } catch (err) {
-    console.error("Error in /api/video-status:", err);
+  } catch (err: any) {
+    console.error("Error in /api/video-status:", err?.message || err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
