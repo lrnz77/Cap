@@ -77,7 +77,7 @@ const app = new Hono()
         if (video.source.type === "desktopMP4") {
           // FIX: Use direct MinIO URL instead of signed URL
           return c.redirect(
-            `http://62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`
+            `//62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`
           );
         }
 
@@ -151,7 +151,7 @@ const app = new Hono()
 
         if (video.source.type === "desktopMP4") {
           // FIX: Use direct MinIO URL instead of signed URL
-          const playlistUrl = `http://62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`;
+          const playlistUrl = `//62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`;
           return c.redirect(playlistUrl);
         }
 
