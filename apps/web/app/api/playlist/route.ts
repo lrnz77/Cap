@@ -75,9 +75,9 @@ const app = new Hono()
 
       if (!customBucket || video.awsBucket === serverEnv().CAP_AWS_BUCKET) {
         if (video.source.type === "desktopMP4") {
-          // FIX: Use direct MinIO URL instead of signed URL
+          // Use S3 remote HTTPS URL
           return c.redirect(
-            `//62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`
+            `https://s3.workflowexpert.io/cap-uploads/${video.ownerId}/${videoId}/result.mp4`
           );
         }
 
@@ -150,8 +150,8 @@ const app = new Hono()
         }
 
         if (video.source.type === "desktopMP4") {
-          // FIX: Use direct MinIO URL instead of signed URL
-          const playlistUrl = `//62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`;
+          // Use S3 remote HTTPS URL
+          const playlistUrl = `https://s3.workflowexpert.io/cap-uploads/${video.ownerId}/${videoId}/result.mp4`;
           return c.redirect(playlistUrl);
         }
 
