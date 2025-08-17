@@ -74,11 +74,12 @@ const app = new Hono()
       const bucket = await createBucketProvider(customBucket);
 
       if (!customBucket || video.awsBucket === serverEnv().CAP_AWS_BUCKET) {
-        if (data.source.type === "desktopMP4") {
-  // Use direct MinIO URL instead of signed URL
-  const directUrl = `http://62.171.177.29:9000/cap-uploads/${data.ownerId}/${videoId}/result.mp4`;
-  return redirect(directUrl);
-}
+        if (video.source.type === "desktopMP4") {
+          // FIX: Use direct MinIO URL instead of signed URL
+          return c.redirect(
+            `http://62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`
+          );
+        }
 
         if (video.source.type === "MediaConvert") {
           return c.redirect(
@@ -148,13 +149,9 @@ const app = new Hono()
           });
         }
 
-      if (data.source.type === "desktopMP4") {
-  // Use direct MinIO URL instead of signed URL
-  const directUrl = `http://62.171.177.29:9000/cap-uploads/${data.ownerId}/${videoId}/result.mp4`;
-  return redirect(directUrl);
-};
-          if (!playlistUrl) return new Response(null, { status: 404 });
-
+        if (video.source.type === "desktopMP4") {
+          // FIX: Use direct MinIO URL instead of signed URL
+          const playlistUrl = `http://62.171.177.29:9000/cap-uploads/${video.ownerId}/${videoId}/result.mp4`;
           return c.redirect(playlistUrl);
         }
 
