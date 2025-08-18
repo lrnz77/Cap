@@ -1,7 +1,3 @@
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
-export const revalidate = 0; // opzionale: disattiva ISR/caching per sicurezza
-
 import { db } from "@cap/database";
 import { s3Buckets, videos } from "@cap/database/schema";
 import { eq } from "drizzle-orm";
@@ -20,6 +16,7 @@ import { handle } from "hono/vercel";
 import { corsMiddleware, withOptionalAuth } from "../utils";
 import { userHasAccessToVideo } from "@/utils/auth";
 
+export const revalidate = "force-dynamic";
 
 const app = new Hono()
   .basePath("/api/playlist")
