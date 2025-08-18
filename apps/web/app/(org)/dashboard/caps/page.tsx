@@ -1,3 +1,4 @@
+// apps/web/app/(org)/dashboard/caps/page.tsx
 import { db } from "@cap/database";
 import { getCurrentUser } from "@cap/database/auth/session";
 import {
@@ -8,7 +9,7 @@ import {
   spaceVideos,
   spaces,
   users,
-  videos
+  videos,
 } from "@cap/database/schema";
 import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { Metadata } from "next";
@@ -20,10 +21,14 @@ export const metadata: Metadata = {
   title: "My Caps — Cap",
 };
 
-// Helper function to fetch shared spaces data for videos
+// Carica gli spazi condivisi (sia space che org) per un set di video
 async function getSharedSpacesForVideos(videoIds: string[]) {
-  if (videoIds.length === 0) return {};
+  if (videoIds.length === 0) return {} as Record<
+    string,
+    Array<{ id: string; name: string; organizationId: string; iconUrl: string | null; isOrg: boolean }>
+  >;
 
+  // Condivisione a livello space
   const spaceSharing = await db()
     .select({
       videoId: spaceVideos.videoId,
@@ -35,13 +40,9 @@ async function getSharedSpacesForVideos(videoIds: string[]) {
     .from(spaceVideos)
     .innerJoin(spaces, eq(spaceVideos.spaceId, spaces.id))
     .innerJoin(organizations, eq(spaces.organizationId, organizations.id))
-    .where(
-      sql`${spaceVideos.videoId} IN (${sql.join(
-        videoIds.map((id) => sql`${id}`),
-        sql`, `
-      )})`
-    );
+    .where(sql`${spaceVideos.videoId} IN (${sql.join(videoIds.map((v) => sql`${v}`), sql`, `)})`);
 
+  // Condivisione a livello organizzazione
   const orgSharing = await db()
     .select({
       videoId: sharedVideos.videoId,
@@ -52,51 +53,33 @@ async function getSharedSpacesForVideos(videoIds: string[]) {
     })
     .from(sharedVideos)
     .innerJoin(organizations, eq(sharedVideos.organizationId, organizations.id))
-    .where(
-      sql`${sharedVideos.videoId} IN (${sql.join(
-        videoIds.map((id) => sql`${id}`),
-        sql`, `
-      )})`
-    );
+    .where(sql`${sharedVideos.videoId} IN (${sql.join(videoIds.map((v) => sql`${v}`), sql`, `)})`);
 
-  const sharedSpacesMap: Record<
+  const map: Record<
     string,
-    Array<{
-      id: string;
-      name: string;
-      organizationId: string;
-      iconUrl: string;
-      isOrg: boolean;
-    }>
+    Array<{ id: string; name: string; organizationId: string; iconUrl: string | null; isOrg: boolean }>
   > = {};
 
-  spaceSharing.forEach((space) => {
-    if (!sharedSpacesMap[space.videoId]) {
-      sharedSpacesMap[space.videoId] = [];
-    }
-    sharedSpacesMap[space.videoId]?.push({
-      id: space.id,
-      name: space.name,
-      organizationId: space.organizationId,
-      iconUrl: space.iconUrl || "",
+  for (const s of spaceSharing) {
+    (map[s.videoId] ||= []).push({
+      id: s.id,
+      name: s.name,
+      organizationId: s.organizationId,
+      iconUrl: s.iconUrl ?? null,
       isOrg: false,
     });
-  });
-
-  orgSharing.forEach((org) => {
-    if (!sharedSpacesMap[org.videoId]) {
-      sharedSpacesMap[org.videoId] = [];
-    }
-    sharedSpacesMap[org.videoId]?.push({
-      id: org.id,
-      name: org.name,
-      organizationId: org.organizationId,
-      iconUrl: org.iconUrl || "",
+  }
+  for (const o of orgSharing) {
+    (map[o.videoId] ||= []).push({
+      id: o.id,
+      name: o.name,
+      organizationId: o.organizationId,
+      iconUrl: o.iconUrl ?? null,
       isOrg: true,
     });
-  });
+  }
 
-  return sharedSpacesMap;
+  return map;
 }
 
 export default async function CapsPage({
@@ -105,28 +88,23 @@ export default async function CapsPage({
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
   const user = await getCurrentUser();
-
-  if (!user || !user.id) {
-    redirect("/login");
-  }
-
-  if (!user.name || user.name.length <= 1) {
-    redirect("/onboarding");
-  }
+  if (!user?.id) redirect("/login");
+  if (!user.name || user.name.length <= 1) redirect("/onboarding");
 
   const userId = user.id;
   const page = Number(searchParams.page) || 1;
   const limit = Number(searchParams.limit) || 15;
   const offset = (page - 1) * limit;
 
+  // Conteggio totale
   const totalCountResult = await db()
     .select({ count: count() })
     .from(videos)
     .where(eq(videos.ownerId, userId));
+  const totalCount = Number(totalCountResult[0]?.count ?? 0);
 
-  const totalCount = totalCountResult[0]?.count || 0;
-
-  const organizationData = await db()
+  // Dati dominio custom dell’organizzazione
+  const orgRow = await db()
     .select({
       customDomain: organizations.customDomain,
       domainVerified: organizations.domainVerified,
@@ -135,21 +113,11 @@ export default async function CapsPage({
     .where(eq(organizations.id, user.activeOrganizationId))
     .limit(1);
 
-  let customDomain: string | null = null;
-  let domainVerified = false;
+  const customDomain = orgRow[0]?.customDomain ?? null;
+  const domainVerified = orgRow[0]?.domainVerified != null;
 
-  if (
-    organizationData.length > 0 &&
-    organizationData[0] &&
-    organizationData[0].customDomain
-  ) {
-    customDomain = organizationData[0].customDomain;
-    if (organizationData[0].domainVerified !== null) {
-      domainVerified = true;
-    }
-  }
-
-  const videoData = await db()
+  // Query principale semplificata: niente JSON_ARRAYAGG
+  const videoRows = await db()
     .select({
       id: videos.id,
       ownerId: videos.ownerId,
@@ -157,26 +125,11 @@ export default async function CapsPage({
       createdAt: videos.createdAt,
       metadata: videos.metadata,
       public: videos.public,
-      thumbnailUrl: videos.thumbnailUrl,   // 👈 aggiunto
-      isScreenshot: videos.isScreenshot,   // 👈 aggiunto
+      thumbnailUrl: videos.thumbnailUrl,   // <— usato per la thumb
+      isScreenshot: videos.isScreenshot,   // <— flag eventuale UI
+      ownerName: users.name,
       totalComments: sql<number>`COUNT(DISTINCT CASE WHEN ${comments.type} = 'text' THEN ${comments.id} END)`,
       totalReactions: sql<number>`COUNT(DISTINCT CASE WHEN ${comments.type} = 'emoji' THEN ${comments.id} END)`,
-      sharedOrganizations: sql<
-        { id: string; name: string; iconUrl: string }[]
-      >`
-        COALESCE(
-          JSON_ARRAYAGG(
-            JSON_OBJECT(
-              'id', ${organizations.id},
-              'name', ${organizations.name},
-              'iconUrl', ${organizations.iconUrl}
-            )
-          ),
-          JSON_ARRAY()
-        )
-      `,
-
-      ownerName: users.name,
       effectiveDate: sql<string>`
         COALESCE(
           JSON_UNQUOTE(JSON_EXTRACT(${videos.metadata}, '$.customCreatedAt')),
@@ -187,8 +140,6 @@ export default async function CapsPage({
     })
     .from(videos)
     .leftJoin(comments, eq(videos.id, comments.videoId))
-    .leftJoin(sharedVideos, eq(videos.id, sharedVideos.videoId))
-    .leftJoin(organizations, eq(sharedVideos.organizationId, organizations.id))
     .leftJoin(users, eq(videos.ownerId, users.id))
     .where(and(eq(videos.ownerId, userId), isNull(videos.folderId)))
     .groupBy(
@@ -197,28 +148,27 @@ export default async function CapsPage({
       videos.name,
       videos.createdAt,
       videos.metadata,
-      users.name
+      users.name,
+      videos.thumbnailUrl,
+      videos.isScreenshot
     )
     .orderBy(
-      desc(
-        sql`COALESCE(
-      JSON_UNQUOTE(JSON_EXTRACT(${videos.metadata}, '$.customCreatedAt')),
-      ${videos.createdAt}
-    )`
-      )
+      desc(sql`COALESCE(
+        JSON_UNQUOTE(JSON_EXTRACT(${videos.metadata}, '$.customCreatedAt')),
+        ${videos.createdAt}
+      )`)
     )
     .limit(limit)
     .offset(offset);
 
+  // Cartelle root
   const foldersData = await db()
     .select({
       id: folders.id,
       name: folders.name,
       color: folders.color,
       parentId: folders.parentId,
-      videoCount: sql<number>`(
-        SELECT COUNT(*) FROM videos WHERE videos.folderId = folders.id
-      )`,
+      videoCount: sql<number>`(SELECT COUNT(*) FROM ${videos} WHERE ${videos.folderId} = ${folders.id})`,
     })
     .from(folders)
     .where(
@@ -229,47 +179,39 @@ export default async function CapsPage({
       )
     );
 
-  const videoIds = videoData.map((video) => video.id);
+  // Spazi condivisi per tutti i video mostrati
+  const videoIds = videoRows.map((v) => v.id);
   const sharedSpacesMap = await getSharedSpacesForVideos(videoIds);
 
-  const processedVideoData = videoData.map((video) => {
-    const { effectiveDate, ...videoWithoutEffectiveDate } = video;
-
-    // 👇 fallback thumbnail resolver
-    const thumbnail =
-      (video.metadata as any)?.thumbnail ||
-      (video.metadata as any)?.thumbnailUrl ||
-      video.thumbnailUrl ||
-      (video.isScreenshot && video.ownerId && video.id
-        ? `https://s3.workflowexpert.io/cap-uploads/${video.ownerId}/${video.id}/screenshot/screen-capture.jpg`
-        : undefined);
-
-    return {
-      ...videoWithoutEffectiveDate,
-      foldersData,
-      sharedOrganizations: Array.isArray(video.sharedOrganizations)
-        ? video.sharedOrganizations.filter(
-            (organization) => organization.id !== null
-          )
-        : [],
-      sharedSpaces: Array.isArray(sharedSpacesMap[video.id])
-        ? sharedSpacesMap[video.id]
-        : [],
-      ownerName: video.ownerName ?? "",
-      metadata: video.metadata as
-        | {
-            customCreatedAt?: string;
-            [key: string]: any;
-          }
-        | undefined,
-      hasPassword: video.hasPassword === 1,
-      thumbnail, // 👈 aggiunto al payload finale
-    };
-  });
+  // Normalizzazione dati per la UI
+  const processedVideoData = videoRows.map((v) => ({
+    id: v.id,
+    ownerId: v.ownerId,
+    name: v.name,
+    createdAt: v.createdAt,
+    public: !!v.public,
+    totalComments: Number(v.totalComments ?? 0),
+    totalReactions: Number(v.totalReactions ?? 0),
+    ownerName: v.ownerName ?? "",
+    metadata: (v.metadata as any) ?? {},          // <-- mai undefined
+    hasPassword: v.hasPassword === 1,
+    // campi per la thumb
+    // la CapCard/VideoThumbnail potrà usarli
+    // (se hai un componente che vuole solo userId/videoId va comunque bene)
+    // li lasciamo qui per eventuali usi futuri
+    // @ts-expect-error: field present in select
+    thumbnailUrl: v.thumbnailUrl ?? null,
+    // @ts-expect-error: field present in select
+    isScreenshot: v.isScreenshot ?? 0,
+    // condivisioni
+    sharedOrganizations: [] as { id: string; name: string; iconUrl?: string | null }[],
+    sharedSpaces: sharedSpacesMap[v.id] ?? [],
+    foldersData,
+  }));
 
   return (
     <Caps
-      data={processedVideoData}
+      data={processedVideoData as any}
       folders={foldersData}
       customDomain={customDomain}
       domainVerified={domainVerified}
