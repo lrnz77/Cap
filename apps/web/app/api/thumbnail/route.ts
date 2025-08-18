@@ -60,12 +60,11 @@ export async function GET(request: NextRequest) {
 
   const { video } = result;
   const prefix = `${userId}/${videoId}/`;
+
   let thumbnailUrl: string;
 
   if (!result.bucket || video.awsBucket === serverEnv().CAP_AWS_BUCKET) {
-    // USA L'URL CORRETTO DI S3!
-    thumbnailUrl = `https://s3.workflowexpert.io/cap-uploads/${prefix}screenshot/screen-capture.jpg`;
-    
+    thumbnailUrl = `${S3_BUCKET_URL}/${prefix}screenshot/screen-capture.jpg`;
     return new Response(JSON.stringify({ screen: thumbnailUrl }), {
       status: 200,
       headers: getHeaders(origin),
@@ -79,6 +78,7 @@ export async function GET(request: NextRequest) {
       prefix: prefix,
     });
     const contents = listResponse.Contents || [];
+
     const thumbnailKey = contents.find((item: any) =>
       item.Key?.endsWith("screen-capture.jpg")
     )?.Key;
