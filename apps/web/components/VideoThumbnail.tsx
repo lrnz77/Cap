@@ -37,19 +37,53 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
     const imageUrl = useQuery({
       queryKey: ["thumbnail", userId, videoId],
       queryFn: async () => {
-        // Bypassa l'API e usa direttamente S3
-        const cacheBuster = new Date().getTime();
-        const s3Url = `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
-        return `${s3Url}?t=${cacheBuster}`;
+        try {
+          const cacheBuster = new Date().getTime();
+          const response = await fetch(
+            `/api/thumbnail?userId=${userId}&videoId=${videoId}&t=${cacheBuster}`
+          );
+          
+          if (!response.ok) {
+            console.error("Thumbnail API error:", response.status);
+            // Fallback diretto a S3
+            return `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
+          }
+          
+          const data = await response.json();
+          
+          if (!data || !data.screen) {
+            console.error("Invalid API response:", data);
+            // Fallback diretto a S3
+            return `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
+          }
+          
+          return data.screen;
+        } catch (error) {
+          console.error("Failed to fetch thumbnail:", error);
+          // Fallback diretto a S3
+          return `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
+        }
       },
+      retry: false, // Non riprovare se fallisce
     });
 
     const imageRef = useRef<HTMLImageElement>(null);
-    const { uploadingCapId } = useUploadingContext();
+    
+    // Gestione sicura di useUploadingContext
+    let uploadingCapId = null;
+    try {
+      const context = useUploadingContext();
+      uploadingCapId = context?.uploadingCapId;
+    } catch (e) {
+      // Context potrebbe non esistere
+      console.log("UploadingContext not available");
+    }
 
     useEffect(() => {
-      imageUrl.refetch();
-    }, [imageUrl.refetch, uploadingCapId]);
+      if (imageUrl.refetch) {
+        imageUrl.refetch();
+      }
+    }, [uploadingCapId]);
 
     const randomGradient = `linear-gradient(to right, ${generateRandomGrayScaleColor()}, ${generateRandomGrayScaleColor()})`;
 
@@ -83,19 +117,14 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
           )}
         </div>
         {imageUrl.data && (
-          <img
+          <Image
             ref={imageRef}
             src={imageUrl.data}
+            fill={true}
+            sizes="(max-width: 768px) 100vw, 33vw"
             alt={alt}
             key={videoId}
-            style={{ 
-              objectFit: objectFit as any,
-              width: '100%',
-              height: '100%',
-              position: 'absolute',
-              top: 0,
-              left: 0
-            }}
+            style={{ objectFit: objectFit as any }}
             className={clsx(
               "w-full h-full",
               imageClass,
@@ -103,6 +132,8 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
             )}
             onLoad={() => setImageStatus("success")}
             onError={() => setImageStatus("error")}
+            unoptimized
+            priority={false}
           />
         )}
       </div>
