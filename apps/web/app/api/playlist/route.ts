@@ -1,4 +1,5 @@
-export const runtime = 'nodejs'; // Force Node.js runtime instead of Edge
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { db } from "@cap/database";
 import { s3Buckets, videos } from "@cap/database/schema";
