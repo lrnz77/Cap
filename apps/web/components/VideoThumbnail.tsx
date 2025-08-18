@@ -4,6 +4,7 @@ import clsx from "clsx";
 import Image from "next/image";
 import { memo, useEffect, useRef, useState } from "react";
 import { useUploadingContext } from "@/app/(org)/dashboard/caps/UploadingContext";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
 
 interface VideoThumbnailProps {
 	userId: string;
