@@ -2,8 +2,6 @@ import { downloadVideo } from "@/actions/videos/download";
 import { ConfirmationDialog } from "@/app/(org)/dashboard/_components/ConfirmationDialog";
 import { useDashboardContext } from "@/app/(org)/dashboard/Contexts";
 import { Tooltip } from "@/components/Tooltip";
-// ❌ rimuoviamo VideoThumbnail: useremo Next/Image con fallback robusto
-// import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { VideoMetadata } from "@cap/database/types";
 import {
   Button,
@@ -59,7 +57,7 @@ export interface CapCardProps extends PropsWithChildren {
     metadata?: VideoMetadata;
     hasPassword?: boolean;
 
-    // 👇 questi arrivano da page.tsx patchata
+    // 👇 arrivano dalla patch in page.tsx
     thumbnail?: string;
     thumbnailUrl?: string;
     isScreenshot?: boolean;
@@ -432,8 +430,7 @@ export const CapCard = ({
                   : "group-hover:opacity-30",
                 "transition-opacity duration-200 w-full h-auto rounded-t-xl object-cover"
               )}
-              // se vuoi bypassare l'optimizer:
-              // unoptimized
+              unoptimized
             />
           ) : (
             <div
