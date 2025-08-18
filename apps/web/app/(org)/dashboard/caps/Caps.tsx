@@ -2,9 +2,9 @@
 import { deleteVideo } from "@/actions/videos/delete";
 import { VideoMetadata } from "@cap/database/types";
 import { Button } from "@cap/ui";
-import { faFolderPlus } from "@fortawesome/free-solid-svg-icons";
+import { faFolderPlus, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { useRouter, useSearchParams, } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { NewFolderDialog } from "./components/NewFolderDialog";
@@ -16,7 +16,6 @@ import { SelectedCapsBar } from "./components/SelectedCapsBar";
 import { UploadCapButton } from "./components/UploadCapButton";
 import { UploadPlaceholderCard } from "./components/UploadPlaceholderCard";
 import Folder from "./components/Folder";
-import { faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import type { FolderDataType } from "./components/Folder";
 import { useUploadingContext } from "./UploadingContext";
 import { useQuery } from "@tanstack/react-query";
@@ -41,6 +40,10 @@ export type VideoData = {
   ownerName: string;
   metadata?: VideoMetadata;
   hasPassword: boolean;
+  // 👇 campi aggiunti per la thumbnail
+  thumbnail?: string;
+  thumbnailUrl?: string;
+  isScreenshot?: boolean;
 }[];
 
 export const Caps = ({
@@ -80,7 +83,7 @@ export const Caps = ({
   const anyCapSelected = selectedCaps.length > 0;
 
   const { data: analyticsData } = useQuery({
-    queryKey: ['analytics', data.map(video => video.id)],
+    queryKey: ["analytics", data.map((video) => video.id)],
     queryFn: async () => {
       if (!dubApiKeyEnabled || data.length === 0) {
         return {};
@@ -89,9 +92,9 @@ export const Caps = ({
       const analyticsPromises = data.map(async (video) => {
         try {
           const response = await fetch(`/api/analytics?videoId=${video.id}`, {
-            method: 'GET',
+            method: "GET",
             headers: {
-              'Content-Type': 'application/json',
+              "Content-Type": "application/json",
             },
           });
 
@@ -110,14 +113,14 @@ export const Caps = ({
       const analyticsData: Record<string, number> = {};
 
       results.forEach((result) => {
-        if (result.status === 'fulfilled' && result.value) {
+        if (result.status === "fulfilled" && result.value) {
           analyticsData[result.value.videoId] = result.value.count;
         }
       });
 
       return analyticsData;
     },
-    staleTime: 30000, // 30 seconds
+    staleTime: 30000,
     refetchOnWindowFocus: false,
   });
 
@@ -219,16 +222,20 @@ export const Caps = ({
           }
         },
         {
-          loading: `Deleting ${selectedCaps.length} cap${selectedCaps.length === 1 ? "" : "s"
-            }...`,
+          loading: `Deleting ${selectedCaps.length} cap${
+            selectedCaps.length === 1 ? "" : "s"
+          }...`,
           success: (data) => {
             if (data.error) {
-              return `Successfully deleted ${data.success} cap${data.success === 1 ? "" : "s"
-                }, but failed to delete ${data.error} cap${data.error === 1 ? "" : "s"
-                }`;
-            }
-            return `Successfully deleted ${data.success} cap${data.success === 1 ? "" : "s"
+              return `Successfully deleted ${data.success} cap${
+                data.success === 1 ? "" : "s"
+              }, but failed to delete ${data.error} cap${
+                data.error === 1 ? "" : "s"
               }`;
+            }
+            return `Successfully deleted ${data.success} cap${
+              data.success === 1 ? "" : "s"
+            }`;
           },
           error: (error) =>
             error.message || "An error occurred while deleting caps",
@@ -263,8 +270,13 @@ export const Caps = ({
         <div className="fixed inset-0 z-50 pointer-events-none">
           <div className="flex justify-center items-center w-full h-full">
             <div className="flex gap-2 items-center px-5 py-3 text-sm font-medium text-white rounded-xl bg-blue-12">
-              <FontAwesomeIcon className="size-3.5 text-white opacity-50" icon={faInfoCircle} />
-              <p className="text-white">Drag to a space to share or folder to move</p>
+              <FontAwesomeIcon
+                className="size-3.5 text-white opacity-50"
+                icon={faInfoCircle}
+              />
+              <p className="text-white">
+                Drag to a space to share or folder to move
+              </p>
             </div>
           </div>
         </div>
@@ -318,11 +330,7 @@ export const Caps = ({
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {isUploading && (
-              <UploadPlaceholderCard
-                key={"upload-placeholder"}
-              />
-            )}
+            {isUploading && <UploadPlaceholderCard key={"upload-placeholder"} />}
             {data.map((cap) => (
               <CapCard
                 key={cap.id}
