@@ -1,110 +1,58 @@
-import { LogoSpinner } from "@cap/ui";
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
 import clsx from "clsx";
-import Image from "next/image";
-import { memo, useEffect, useRef, useState } from "react";
-import { useUploadingContext } from "@/app/(org)/dashboard/caps/UploadingContext";
+import { memo, useState } from "react";
 
 interface VideoThumbnailProps {
-	userId: string;
-	videoId: string;
-	alt: string;
-	imageClass?: string;
-	objectFit?: string;
-	containerClass?: string;
-}
-
-function generateRandomGrayScaleColor() {
-	const minGrayScaleValue = 190;
-	const maxGrayScaleValue = 235;
-	const grayScaleValue = Math.floor(
-		Math.random() * (maxGrayScaleValue - minGrayScaleValue) + minGrayScaleValue,
-	);
-	return `rgb(${grayScaleValue}, ${grayScaleValue}, ${grayScaleValue})`;
+  userId: string;
+  videoId: string;
+  alt: string;
+  imageClass?: string;
+  objectFit?: string;
+  containerClass?: string;
 }
 
 export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
-	({
-		userId,
-		videoId,
-		alt,
-		imageClass,
-		objectFit = "cover",
-		containerClass,
-	}) => {
-		const imageUrl = useQuery({
-			queryKey: ["thumbnail", userId, videoId],
-			queryFn: async () => {
-				const cacheBuster = new Date().getTime();
-				const response = await fetch(
-					`/api/thumbnail?userId=${userId}&videoId=${videoId}&t=${cacheBuster}`,
-				);
-				if (response.ok) {
-					const data = await response.json();
-					return data.screen;
-				} else {
-					throw new Error("Failed to fetch pre-signed URLs");
-				}
-			},
-		});
-		const imageRef = useRef<HTMLImageElement>(null);
-
-		const { uploadingCapId } = useUploadingContext();
-
-		useEffect(() => {
-			imageUrl.refetch();
-		}, [imageUrl.refetch, uploadingCapId]);
-
-		const randomGradient = `linear-gradient(to right, ${generateRandomGrayScaleColor()}, ${generateRandomGrayScaleColor()})`;
-
-		const [imageStatus, setImageStatus] = useState<
-			"loading" | "error" | "success"
-		>("loading");
-
-		useEffect(() => {
-			if (imageRef.current?.complete && imageRef.current.naturalWidth != 0) {
-				setImageStatus("success");
-			}
-		}, []);
-
-		return (
-			<div
-				className={clsx(
-					`overflow-hidden relative mx-auto w-full h-full bg-black rounded-t-xl border-b border-gray-3 aspect-video`,
-					containerClass,
-				)}
-			>
-				<div className="flex absolute inset-0 z-10 justify-center items-center">
-					{imageUrl.isError || imageStatus === "error" ? (
-						<div
-							className="w-full h-full"
-							style={{ backgroundImage: randomGradient }}
-						/>
-					) : (
-						(imageUrl.isPending || imageStatus === "loading") && (
-							<LogoSpinner className="w-5 h-auto animate-spin md:w-8" />
-						)
-					)}
-				</div>
-				{imageUrl.data && (
-					<Image
-						ref={imageRef}
-						src={imageUrl.data}
-						fill={true}
-						sizes="(max-width: 768px) 100vw, 33vw"
-						alt={alt}
-						key={videoId}
-						style={{ objectFit: objectFit as any }}
-						className={clsx(
-							"w-full h-full",
-							imageClass,
-							imageStatus === "loading" && "opacity-0",
-						)}
-						onLoad={() => setImageStatus("success")}
-						onError={() => setImageStatus("error")}
-					/>
-				)}
-			</div>
-		);
-	},
+  ({
+    userId,
+    videoId,
+    alt,
+    imageClass,
+    objectFit = "cover",
+    containerClass,
+  }) => {
+    const [hasError, setHasError] = useState(false);
+    
+    // URL diretto S3
+    const imageUrl = `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
+    
+    return (
+      <div
+        className={clsx(
+          `overflow-hidden relative mx-auto w-full h-full bg-gray-800 rounded-t-xl border-b border-gray-3 aspect-video`,
+          containerClass
+        )}
+      >
+        {hasError ? (
+          <div className="flex items-center justify-center h-full bg-gray-900">
+            <div className="text-gray-500">Preview not available</div>
+          </div>
+        ) : (
+          <img
+            src={imageUrl}
+            alt={alt}
+            className={clsx(
+              "w-full h-full object-cover",
+              imageClass
+            )}
+            style={{ objectFit: objectFit as any }}
+            onError={() => setHasError(true)}
+            loading="lazy"
+          />
+        )}
+      </div>
+    );
+  }
 );
+
+VideoThumbnail.displayName = "VideoThumbnail";
