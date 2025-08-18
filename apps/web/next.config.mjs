@@ -1,7 +1,5 @@
 /** @type {import('next').NextConfig} */
-
 import("dotenv").then(({ config }) => config({ path: "../../.env" }));
-
 import fs from "fs";
 import path from "path";
 
@@ -30,7 +28,20 @@ const nextConfig = {
     optimizePackageImports: ["@cap/ui", "@cap/utils", "@cap/web-api-contract"],
   },
   images: {
+    unoptimized: true, // IMPORTANTE: Disabilita l'ottimizzazione per domini esterni
     remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "s3.workflowexpert.io", // S3 PUBBLICO ESPLICITO
+        port: "",
+        pathname: "/cap-uploads/**",
+      },
+      {
+        protocol: "http",
+        hostname: "62.171.177.29", // MinIO interno (fallback)
+        port: "9000",
+        pathname: "/cap-uploads/**",
+      },
       {
         protocol: "https",
         hostname: "**",
@@ -101,7 +112,6 @@ const nextConfig = {
   env: {
     appVersion: version,
   },
-  // If the DOCKER_BUILD environment variable is set to true, we are output nextjs to standalone ready for docker deployment
   output:
     process.env.NEXT_PUBLIC_DOCKER_BUILD === "true" ? "standalone" : undefined,
 };
