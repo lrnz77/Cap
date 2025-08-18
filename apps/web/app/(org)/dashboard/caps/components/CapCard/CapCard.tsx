@@ -2,20 +2,29 @@ import { downloadVideo } from "@/actions/videos/download";
 import { ConfirmationDialog } from "@/app/(org)/dashboard/_components/ConfirmationDialog";
 import { useDashboardContext } from "@/app/(org)/dashboard/Contexts";
 import { Tooltip } from "@/components/Tooltip";
-import { VideoThumbnail } from "@/components/VideoThumbnail";
+// ❌ rimuoviamo VideoThumbnail: useremo Next/Image con fallback robusto
+// import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { VideoMetadata } from "@cap/database/types";
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@cap/ui";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@cap/ui";
 import {
   faCheck,
   faCopy,
-  faEllipsis, faLock,
+  faEllipsis,
+  faLock,
   faTrash,
   faUnlock,
-  faVideo
+  faVideo,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import clsx from "clsx";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { PropsWithChildren, useState } from "react";
 import { toast } from "sonner";
@@ -25,8 +34,6 @@ import { CapCardAnalytics } from "./CapCardAnalytics";
 import { CapCardButtons } from "./CapCardButtons";
 import { CapCardContent } from "./CapCardContent";
 import { duplicateVideo } from "@/actions/videos/duplicate";
-
-
 
 export interface CapCardProps extends PropsWithChildren {
   cap: {
@@ -51,6 +58,11 @@ export interface CapCardProps extends PropsWithChildren {
     ownerName: string | null;
     metadata?: VideoMetadata;
     hasPassword?: boolean;
+
+    // 👇 questi arrivano da page.tsx patchata
+    thumbnail?: string;
+    thumbnailUrl?: string;
+    isScreenshot?: boolean;
   };
   analytics: number;
   onDelete?: () => Promise<void>;
@@ -66,6 +78,16 @@ export interface CapCardProps extends PropsWithChildren {
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }
+
+// Fallback robusto per la cover
+const getThumb = (cap: CapCardProps["cap"]) =>
+  cap?.thumbnail ||
+  cap?.metadata?.thumbnail ||
+  cap?.metadata?.thumbnailUrl ||
+  cap?.thumbnailUrl ||
+  (cap?.ownerId && cap?.id
+    ? `https://s3.workflowexpert.io/cap-uploads/${cap.ownerId}/${cap.id}/screenshot/screen-capture.jpg`
+    : undefined);
 
 export const CapCard = ({
   cap,
@@ -126,29 +148,20 @@ export const CapCard = ({
 
   const isOwner = userId === cap.ownerId;
 
-  // Helper function to create a drag preview element
   const createDragPreview = (text: string): HTMLElement => {
-    // Create the element
-    const element = document.createElement('div');
-
-    // Add text content
+    const element = document.createElement("div");
     element.textContent = text;
-
-    // Apply Tailwind-like styles directly
-    element.className = 'px-2 py-1.5 text-sm font-medium rounded-lg shadow-md text-gray-1 bg-gray-12';
-
-    // Position off-screen
-    element.style.position = 'absolute';
-    element.style.top = '-9999px';
-    element.style.left = '-9999px';
-
+    element.className =
+      "px-2 py-1.5 text-sm font-medium rounded-lg shadow-md text-gray-1 bg-gray-12";
+    element.style.position = "absolute";
+    element.style.top = "-9999px";
+    element.style.left = "-9999px";
     return element;
   };
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     if (anyCapSelected || !isOwner) return;
 
-    // Set the data transfer
     e.dataTransfer.setData(
       "application/cap",
       JSON.stringify({
@@ -156,20 +169,15 @@ export const CapCard = ({
         name: cap.name,
       })
     );
+    e.dataTransfer.effectAllowed = "move";
 
-    // Set drag effect to 'move' to avoid showing the + icon
-    e.dataTransfer.effectAllowed = 'move';
-
-    // Set the drag image using the helper function
     try {
       const dragPreview = createDragPreview(cap.name);
       document.body.appendChild(dragPreview);
       e.dataTransfer.setDragImage(dragPreview, 10, 10);
-
-      // Clean up after a short delay
       setTimeout(() => document.body.removeChild(dragPreview), 100);
     } catch (error) {
-      console.error('Error setting drag image:', error);
+      console.error("Error setting drag image:", error);
     }
 
     setIsDragging(true);
@@ -182,14 +190,11 @@ export const CapCard = ({
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopyPressed(true);
-    setTimeout(() => {
-      setCopyPressed(false);
-    }, 2000);
+    setTimeout(() => setCopyPressed(false), 2000);
   };
 
   const handleDownload = async () => {
     if (isDownloading) return;
-
     setIsDownloading(true);
 
     try {
@@ -214,12 +219,8 @@ export const CapCard = ({
         {
           loading: "Preparing download...",
           success: "Download started successfully",
-          error: (error) => {
-            if (error instanceof Error) {
-              return error.message;
-            }
-            return "Failed to download video - please try again.";
-          },
+          error: (error) =>
+            error instanceof Error ? error.message : "Failed to download video - please try again.",
         }
       );
     } catch (error) {
@@ -229,24 +230,21 @@ export const CapCard = ({
     }
   };
 
-
   const handleCardClick = (e: React.MouseEvent) => {
     if (anyCapSelected) {
       e.preventDefault();
       e.stopPropagation();
-      if (onSelectToggle) {
-        onSelectToggle();
-      }
+      onSelectToggle?.();
     }
   };
 
   const handleSelectClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (onSelectToggle) {
-      onSelectToggle();
-    }
+    onSelectToggle?.();
   };
+
+  const thumb = getThumb(cap);
 
   return (
     <>
@@ -276,18 +274,16 @@ export const CapCard = ({
           isSelected
             ? "!border-blue-10 border-px"
             : anyCapSelected
-              ? "border-blue-10 border-px hover:border-blue-10"
-              : "hover:border-blue-10",
+            ? "border-blue-10 border-px hover:border-blue-10"
+            : "hover:border-blue-10",
           isDragging && "opacity-50",
           isOwner && !anyCapSelected && "cursor-grab active:cursor-grabbing"
         )}
       >
         {anyCapSelected && !sharedCapCard && (
-          <div
-            className="absolute inset-0 z-10"
-            onClick={handleCardClick}
-          />
+          <div className="absolute inset-0 z-10" onClick={handleCardClick} />
         )}
+
         {!sharedCapCard && (
           <div
             className={clsx(
@@ -295,8 +291,8 @@ export const CapCard = ({
               anyCapSelected
                 ? "opacity-0"
                 : isDropdownOpen
-                  ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100",
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100",
               "top-2 right-2 flex-col gap-2 z-[20]"
             )}
           >
@@ -314,10 +310,9 @@ export const CapCard = ({
               <Tooltip content="More options">
                 <DropdownMenuTrigger asChild>
                   <Button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    className={clsx("!size-8 hover:bg-gray-5 hover:border-gray-7 rounded-full min-w-fit !p-0 delay-75",
+                    onClick={(e) => e.stopPropagation()}
+                    className={clsx(
+                      "!size-8 hover:bg-gray-5 hover:border-gray-7 rounded-full min-w-fit !p-0 delay-75",
                       isDropdownOpen ? "bg-gray-5 border-gray-7" : ""
                     )}
                     variant="white"
@@ -329,14 +324,11 @@ export const CapCard = ({
                 </DropdownMenuTrigger>
               </Tooltip>
 
-              <DropdownMenuContent
-                align="end"
-                sideOffset={5}
-              >
+              <DropdownMenuContent align="end" sideOffset={5}>
                 <DropdownMenuItem
                   onClick={async () => {
                     try {
-                      await duplicateVideo(cap.id)
+                      await duplicateVideo(cap.id);
                       toast.success("Cap duplicated successfully");
                     } catch (error) {
                       toast.error("Failed to duplicate cap");
@@ -344,19 +336,14 @@ export const CapCard = ({
                   }}
                   className="flex gap-2 items-center rounded-lg"
                 >
-                  <FontAwesomeIcon
-                    className="size-3"
-                    icon={faCopy}
-                  />
+                  <FontAwesomeIcon className="size-3" icon={faCopy} />
                   <p className="text-sm text-gray-12">Duplicate</p>
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                   onClick={() => {
-                    if (!isSubscribed) {
-                      setUpgradeModalOpen(true);
-                    } else {
-                      setIsPasswordDialogOpen(true);
-                    }
+                    if (!isSubscribed) setUpgradeModalOpen(true);
+                    else setIsPasswordDialogOpen(true);
                   }}
                   className="flex gap-2 items-center rounded-lg"
                 >
@@ -364,8 +351,11 @@ export const CapCard = ({
                     className="size-3"
                     icon={passwordProtected ? faLock : faUnlock}
                   />
-                  <p className="text-sm text-gray-12">{passwordProtected ? "Edit password" : "Add password"}</p>
+                  <p className="text-sm text-gray-12">
+                    {passwordProtected ? "Edit password" : "Add password"}
+                  </p>
                 </DropdownMenuItem>
+
                 <DropdownMenuItem
                   onClick={(e) => {
                     handleDeleteClick(e);
@@ -377,6 +367,7 @@ export const CapCard = ({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+
             <ConfirmationDialog
               open={confirmOpen}
               icon={<FontAwesomeIcon icon={faVideo} />}
@@ -390,6 +381,7 @@ export const CapCard = ({
             />
           </div>
         )}
+
         {!sharedCapCard && onSelectToggle && (
           <div
             className={clsx(
@@ -406,9 +398,7 @@ export const CapCard = ({
             <div
               className={clsx(
                 "flex justify-center items-center w-6 h-6 rounded-md border transition-colors cursor-pointer hover:bg-gray-3/60",
-                isSelected
-                  ? "bg-blue-10 border-blue-10"
-                  : "border-white-95 bg-gray-1/80"
+                isSelected ? "bg-blue-10 border-blue-10" : "border-white-95 bg-gray-1/80"
               )}
             >
               {isSelected && (
@@ -417,28 +407,48 @@ export const CapCard = ({
             </div>
           </div>
         )}
+
         <Link
           className={clsx(
             "block group",
             anyCapSelected && "cursor-pointer pointer-events-none"
           )}
           onClick={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
+            if (isDeleting) e.preventDefault();
           }}
           href={`/s/${cap.id}`}
         >
-          <VideoThumbnail
-            imageClass={clsx(
-              anyCapSelected ? "opacity-50" : isDropdownOpen ? "opacity-30" : "group-hover:opacity-30",
-              "transition-opacity duration-200"
-            )}
-            userId={cap.ownerId}
-            videoId={cap.id}
-            alt={`${cap.name} Thumbnail`}
-          />
+          {thumb ? (
+            <Image
+              src={thumb}
+              alt={`${cap.name} Thumbnail`}
+              width={640}
+              height={360}
+              className={clsx(
+                anyCapSelected
+                  ? "opacity-50"
+                  : isDropdownOpen
+                  ? "opacity-30"
+                  : "group-hover:opacity-30",
+                "transition-opacity duration-200 w-full h-auto rounded-t-xl object-cover"
+              )}
+              // se vuoi bypassare l'optimizer:
+              // unoptimized
+            />
+          ) : (
+            <div
+              className={clsx(
+                anyCapSelected
+                  ? "opacity-50"
+                  : isDropdownOpen
+                  ? "opacity-30"
+                  : "group-hover:opacity-30",
+                "transition-opacity duration-200 w-full h-[180px] rounded-t-xl bg-neutral-900"
+              )}
+            />
+          )}
         </Link>
+
         <div
           className={clsx(
             "flex flex-col flex-grow gap-3 px-4 pb-4 w-full",
