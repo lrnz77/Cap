@@ -2,8 +2,12 @@ import { db } from "@cap/database";
 import { getCurrentUser } from "@cap/database/auth/session";
 import {
   comments,
-  folders, organizations,
-  sharedVideos, spaceVideos, spaces, users,
+  folders,
+  organizations,
+  sharedVideos,
+  spaceVideos,
+  spaces,
+  users,
   videos
 } from "@cap/database/schema";
 import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
@@ -20,7 +24,6 @@ export const metadata: Metadata = {
 async function getSharedSpacesForVideos(videoIds: string[]) {
   if (videoIds.length === 0) return {};
 
-  // Fetch space-level sharing
   const spaceSharing = await db()
     .select({
       videoId: spaceVideos.videoId,
@@ -32,9 +35,13 @@ async function getSharedSpacesForVideos(videoIds: string[]) {
     .from(spaceVideos)
     .innerJoin(spaces, eq(spaceVideos.spaceId, spaces.id))
     .innerJoin(organizations, eq(spaces.organizationId, organizations.id))
-    .where(sql`${spaceVideos.videoId} IN (${sql.join(videoIds.map(id => sql`${id}`), sql`, `)})`);
+    .where(
+      sql`${spaceVideos.videoId} IN (${sql.join(
+        videoIds.map((id) => sql`${id}`),
+        sql`, `
+      )})`
+    );
 
-  // Fetch organization-level sharing
   const orgSharing = await db()
     .select({
       videoId: sharedVideos.videoId,
@@ -45,19 +52,25 @@ async function getSharedSpacesForVideos(videoIds: string[]) {
     })
     .from(sharedVideos)
     .innerJoin(organizations, eq(sharedVideos.organizationId, organizations.id))
-    .where(sql`${sharedVideos.videoId} IN (${sql.join(videoIds.map(id => sql`${id}`), sql`, `)})`);
+    .where(
+      sql`${sharedVideos.videoId} IN (${sql.join(
+        videoIds.map((id) => sql`${id}`),
+        sql`, `
+      )})`
+    );
 
-  // Combine and group by videoId
-  const sharedSpacesMap: Record<string, Array<{
-    id: string;
-    name: string;
-    organizationId: string;
-    iconUrl: string;
-    isOrg: boolean;
-  }>> = {};
+  const sharedSpacesMap: Record<
+    string,
+    Array<{
+      id: string;
+      name: string;
+      organizationId: string;
+      iconUrl: string;
+      isOrg: boolean;
+    }>
+  > = {};
 
-  // Add space-level sharing
-  spaceSharing.forEach(space => {
+  spaceSharing.forEach((space) => {
     if (!sharedSpacesMap[space.videoId]) {
       sharedSpacesMap[space.videoId] = [];
     }
@@ -65,13 +78,12 @@ async function getSharedSpacesForVideos(videoIds: string[]) {
       id: space.id,
       name: space.name,
       organizationId: space.organizationId,
-      iconUrl: space.iconUrl || '',
+      iconUrl: space.iconUrl || "",
       isOrg: false,
     });
   });
 
-  // Add organization-level sharing
-  orgSharing.forEach(org => {
+  orgSharing.forEach((org) => {
     if (!sharedSpacesMap[org.videoId]) {
       sharedSpacesMap[org.videoId] = [];
     }
@@ -79,7 +91,7 @@ async function getSharedSpacesForVideos(videoIds: string[]) {
       id: org.id,
       name: org.name,
       organizationId: org.organizationId,
-      iconUrl: org.iconUrl || '',
+      iconUrl: org.iconUrl || "",
       isOrg: true,
     });
   });
@@ -114,7 +126,6 @@ export default async function CapsPage({
 
   const totalCount = totalCountResult[0]?.count || 0;
 
-  // Get custom domain and verification status for the user's organization
   const organizationData = await db()
     .select({
       customDomain: organizations.customDomain,
@@ -146,9 +157,13 @@ export default async function CapsPage({
       createdAt: videos.createdAt,
       metadata: videos.metadata,
       public: videos.public,
+      thumbnailUrl: videos.thumbnailUrl,   // 👈 aggiunto
+      isScreenshot: videos.isScreenshot,   // 👈 aggiunto
       totalComments: sql<number>`COUNT(DISTINCT CASE WHEN ${comments.type} = 'text' THEN ${comments.id} END)`,
       totalReactions: sql<number>`COUNT(DISTINCT CASE WHEN ${comments.type} = 'emoji' THEN ${comments.id} END)`,
-      sharedOrganizations: sql<{ id: string; name: string; iconUrl: string }[]>`
+      sharedOrganizations: sql<
+        { id: string; name: string; iconUrl: string }[]
+      >`
         COALESCE(
           JSON_ARRAYAGG(
             JSON_OBJECT(
@@ -185,10 +200,12 @@ export default async function CapsPage({
       users.name
     )
     .orderBy(
-      desc(sql`COALESCE(
+      desc(
+        sql`COALESCE(
       JSON_UNQUOTE(JSON_EXTRACT(${videos.metadata}, '$.customCreatedAt')),
       ${videos.createdAt}
-    )`)
+    )`
+      )
     )
     .limit(limit)
     .offset(offset);
@@ -212,18 +229,28 @@ export default async function CapsPage({
       )
     );
 
-  // Fetch shared spaces data for all videos
-  const videoIds = videoData.map(video => video.id);
+  const videoIds = videoData.map((video) => video.id);
   const sharedSpacesMap = await getSharedSpacesForVideos(videoIds);
 
   const processedVideoData = videoData.map((video) => {
     const { effectiveDate, ...videoWithoutEffectiveDate } = video;
 
+    // 👇 fallback thumbnail resolver
+    const thumbnail =
+      (video.metadata as any)?.thumbnail ||
+      (video.metadata as any)?.thumbnailUrl ||
+      video.thumbnailUrl ||
+      (video.isScreenshot && video.ownerId && video.id
+        ? `https://s3.workflowexpert.io/cap-uploads/${video.ownerId}/${video.id}/screenshot/screen-capture.jpg`
+        : undefined);
+
     return {
       ...videoWithoutEffectiveDate,
       foldersData,
       sharedOrganizations: Array.isArray(video.sharedOrganizations)
-        ? video.sharedOrganizations.filter((organization) => organization.id !== null)
+        ? video.sharedOrganizations.filter(
+            (organization) => organization.id !== null
+          )
         : [],
       sharedSpaces: Array.isArray(sharedSpacesMap[video.id])
         ? sharedSpacesMap[video.id]
@@ -231,11 +258,12 @@ export default async function CapsPage({
       ownerName: video.ownerName ?? "",
       metadata: video.metadata as
         | {
-          customCreatedAt?: string;
-          [key: string]: any;
-        }
+            customCreatedAt?: string;
+            [key: string]: any;
+          }
         | undefined,
       hasPassword: video.hasPassword === 1,
+      thumbnail, // 👈 aggiunto al payload finale
     };
   });
 
