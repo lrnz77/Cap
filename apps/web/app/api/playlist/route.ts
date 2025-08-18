@@ -1,4 +1,5 @@
 export const runtime = 'nodejs'; // Force Node.js runtime instead of Edge
+
 import { db } from "@cap/database";
 import { s3Buckets, videos } from "@cap/database/schema";
 import { eq } from "drizzle-orm";
