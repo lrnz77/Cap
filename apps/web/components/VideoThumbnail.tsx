@@ -1,112 +1,94 @@
-import { useUploadingContext } from "@/app/(org)/dashboard/caps/UploadingContext";
-import { LogoSpinner } from "@cap/ui";
-import { useQuery } from "@tanstack/react-query";
-import clsx from "clsx";
-import Image from "next/image";
-import { memo, useEffect, useRef, useState } from "react";
+"use client";
 
-interface VideoThumbnailProps {
+import Image from "next/image";
+import { useMemo, useState } from "react";
+import clsx from "clsx";
+
+type VideoThumbnailProps = {
   userId: string;
   videoId: string;
-  alt: string;
+  alt?: string;
+  /** classi applicate all’<img/> */
   imageClass?: string;
-  objectFit?: string;
-  containerClass?: string;
-}
+  /** classi del wrapper */
+  className?: string;
 
-function generateRandomGrayScaleColor() {
-  const minGrayScaleValue = 190;
-  const maxGrayScaleValue = 235;
-  const grayScaleValue = Math.floor(
-    Math.random() * (maxGrayScaleValue - minGrayScaleValue) + minGrayScaleValue
-  );
-  return `rgb(${grayScaleValue}, ${grayScaleValue}, ${grayScaleValue})`;
-}
+  /** opzionali: override espliciti se li hai già a disposizione */
+  thumbnail?: string | null;
+  thumbnailUrl?: string | null;
+};
 
-export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
-  ({
-    userId,
-    videoId,
-    alt,
-    imageClass,
-    objectFit = "cover",
-    containerClass,
-  }) => {
-    const imageUrl = useQuery({
-      queryKey: ["thumbnail", userId, videoId],
-      queryFn: async () => {
-        const cacheBuster = new Date().getTime();
-        const response = await fetch(
-          `/api/thumbnail?userId=${userId}&videoId=${videoId}&t=${cacheBuster}`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          // Add cache busting to the thumbnail URL as well
-          return `${data.screen}${data.screen.includes("?") ? "&" : "?"
-            }t=${cacheBuster}`;
-        } else {
-          throw new Error("Failed to fetch pre-signed URLs");
-        }
-      },
-    });
-    const imageRef = useRef<HTMLImageElement>(null);
+/**
+ * Mostra la cover di un video con fallback robusto.
+ * Ordine tentativi:
+ *  1) props.thumbnail
+ *  2) props.thumbnailUrl
+ *  3) s3 .../screenshot/screen-capture.jpg
+ *  4) s3 .../result.jpg
+ *  5) s3 .../frame-00001.jpg
+ */
+export function VideoThumbnail({
+  userId,
+  videoId,
+  alt = "Video thumbnail",
+  imageClass,
+  className,
+  thumbnail,
+  thumbnailUrl,
+}: VideoThumbnailProps) {
+  const sources = useMemo(() => {
+    const arr = [
+      thumbnail ?? undefined,
+      thumbnailUrl ?? undefined,
+      userId && videoId
+        ? `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`
+        : undefined,
+      userId && videoId
+        ? `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/result.jpg`
+        : undefined,
+      userId && videoId
+        ? `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/frame-00001.jpg`
+        : undefined,
+    ]
+      .filter(Boolean) as string[];
 
-    const { uploadingCapId } = useUploadingContext();
+    // deduplica conservando l’ordine
+    return Array.from(new Set(arr));
+  }, [userId, videoId, thumbnail, thumbnailUrl]);
 
-    useEffect(() => {
-      imageUrl.refetch();
-    }, [imageUrl.refetch, uploadingCapId]);
+  const [idx, setIdx] = useState(0);
+  const src = sources[idx];
 
-    const randomGradient = `linear-gradient(to right, ${generateRandomGrayScaleColor()}, ${generateRandomGrayScaleColor()})`;
-
-    const [imageStatus, setImageStatus] = useState<
-      "loading" | "error" | "success"
-    >("loading");
-
-    useEffect(() => {
-      if (imageRef.current?.complete && imageRef.current.naturalWidth != 0) {
-        setImageStatus("success");
-      }
-    }, []);
-
-    return (
-      <div
-        className={clsx(
-          `overflow-hidden relative mx-auto w-full h-full bg-black rounded-t-xl border-b border-gray-3 aspect-video`,
-          containerClass
-        )}
-      >
-        <div className="flex absolute inset-0 z-10 justify-center items-center">
-          {imageUrl.isError || imageStatus === "error" ? (
-            <div
-              className="w-full h-full"
-              style={{ backgroundImage: randomGradient }}
-            />
-          ) : (
-            (imageUrl.isPending || imageStatus === "loading") && (
-              <LogoSpinner className="w-5 h-auto animate-spin md:w-8" />
-            )
+  // Wrapper: mantiene aspect-ratio e bordi coerenti con le card
+  return (
+    <div
+      className={clsx(
+        "relative w-full aspect-video overflow-hidden rounded-t-xl bg-black",
+        className
+      )}
+    >
+      {src ? (
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          className={clsx(
+            "object-cover w-full h-full",
+            imageClass
           )}
-        </div>
-        {imageUrl.data && (
-          <Image
-            ref={imageRef}
-            src={imageUrl.data}
-            fill={true}
-            sizes="(max-width: 768px) 100vw, 33vw"
-            alt={alt}
-            key={videoId}
-            style={{ objectFit: objectFit as any }}
-            className={clsx(
-              "w-full h-full",
-              imageClass,
-              imageStatus === "loading" && "opacity-0"
-            )}
-            onLoad={() => setImageStatus("success")}
-            onError={() => setImageStatus("error")}
-          />
-        )}
-      </div>
-    );
-  }
-);
+          // evitiamo problemi con domini non whitelisted
+          unoptimized
+          onError={() => {
+            // prova la prossima sorgente; se finite, lascia il placeholder
+            setIdx((prev) => (prev + 1 < sources.length ? prev + 1 : prev));
+          }}
+        />
+      ) : (
+        // Placeholder finale se tutti i fallback falliscono
+        <div className={clsx(
+          "absolute inset-0 bg-[linear-gradient(120deg,rgba(30,30,30,.9),rgba(10,10,10,.9))]"
+        )}/>
+      )}
+    </div>
+  );
+}
