@@ -1,5 +1,3 @@
-"use client";
-
 import { useUploadingContext } from "@/app/(org)/dashboard/caps/UploadingContext";
 import { LogoSpinner } from "@cap/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -37,57 +35,31 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
     const imageUrl = useQuery({
       queryKey: ["thumbnail", userId, videoId],
       queryFn: async () => {
-        try {
-          const cacheBuster = new Date().getTime();
-          const response = await fetch(
-            `/api/thumbnail?userId=${userId}&videoId=${videoId}&t=${cacheBuster}`
-          );
-          
-          if (!response.ok) {
-            console.error("Thumbnail API error:", response.status);
-            // Fallback diretto a S3
-            return `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
-          }
-          
+        const cacheBuster = new Date().getTime();
+        const response = await fetch(
+          `/api/thumbnail?userId=${userId}&videoId=${videoId}&t=${cacheBuster}`
+        );
+        if (response.ok) {
           const data = await response.json();
-          
-          if (!data || !data.screen) {
-            console.error("Invalid API response:", data);
-            // Fallback diretto a S3
-            return `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
-          }
-          
-          return data.screen;
-        } catch (error) {
-          console.error("Failed to fetch thumbnail:", error);
-          // Fallback diretto a S3
-          return `https://s3.workflowexpert.io/cap-uploads/${userId}/${videoId}/screenshot/screen-capture.jpg`;
+          // Add cache busting to the thumbnail URL as well
+          return `${data.screen}${data.screen.includes("?") ? "&" : "?"
+            }t=${cacheBuster}`;
+        } else {
+          throw new Error("Failed to fetch pre-signed URLs");
         }
       },
-      retry: false, // Non riprovare se fallisce
     });
-
     const imageRef = useRef<HTMLImageElement>(null);
-    
-    // Gestione sicura di useUploadingContext
-    let uploadingCapId = null;
-    try {
-      const context = useUploadingContext();
-      uploadingCapId = context?.uploadingCapId;
-    } catch (e) {
-      // Context potrebbe non esistere
-      console.log("UploadingContext not available");
-    }
+
+    const { uploadingCapId } = useUploadingContext();
 
     useEffect(() => {
-      if (imageUrl.refetch) {
-        imageUrl.refetch();
-      }
-    }, [uploadingCapId]);
+      imageUrl.refetch();
+    }, [imageUrl.refetch, uploadingCapId]);
 
     const randomGradient = `linear-gradient(to right, ${generateRandomGrayScaleColor()}, ${generateRandomGrayScaleColor()})`;
 
-    const [imageStatus, setImageStatus] = useState
+    const [imageStatus, setImageStatus] = useState<
       "loading" | "error" | "success"
     >("loading");
 
@@ -132,13 +104,9 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
             )}
             onLoad={() => setImageStatus("success")}
             onError={() => setImageStatus("error")}
-            unoptimized
-            priority={false}
           />
         )}
       </div>
     );
   }
 );
-
-VideoThumbnail.displayName = "VideoThumbnail";
