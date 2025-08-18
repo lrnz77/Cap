@@ -5,6 +5,7 @@ import { Tooltip } from "@/components/Tooltip";
 import moment from "moment";
 import clsx from "clsx";
 import { Video } from "./AddVideosDialogBase";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
 
 interface VideoCardProps {
   video: Video
