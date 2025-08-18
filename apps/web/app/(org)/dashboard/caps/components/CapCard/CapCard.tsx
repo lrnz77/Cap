@@ -3,6 +3,7 @@ import { ConfirmationDialog } from "@/app/(org)/dashboard/_components/Confirmati
 import { useDashboardContext } from "@/app/(org)/dashboard/Contexts";
 import { Tooltip } from "@/components/Tooltip";
 import { VideoMetadata } from "@cap/database/types";
+import { VideoThumbnail } from "@/components/VideoThumbnail";
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@cap/ui";
 import {
   faCheck,
