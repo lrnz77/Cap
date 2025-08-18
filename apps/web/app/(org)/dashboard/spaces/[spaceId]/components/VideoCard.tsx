@@ -2,7 +2,6 @@ import React, { memo } from "react";
 import { Check, Minus, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Tooltip } from "@/components/Tooltip";
-import { VideoThumbnail } from "@/components/VideoThumbnail";
 import moment from "moment";
 import clsx from "clsx";
 import { Video } from "./AddVideosDialogBase";
