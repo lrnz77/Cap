@@ -1,9 +1,10 @@
+"use client";
+
 import { useUploadingContext } from "@/app/(org)/dashboard/caps/UploadingContext";
 import { LogoSpinner } from "@cap/ui";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import Image from "next/image";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useState } from "react";
 
 interface VideoThumbnailProps {
   userId: string;
@@ -32,6 +33,8 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
     objectFit = "cover",
     containerClass,
   }) => {
+    const [imageStatus, setImageStatus] = useState<"loading" | "error" | "success">("loading");
+    
     const imageUrl = useQuery({
       queryKey: ["thumbnail", userId, videoId],
       queryFn: async () => {
@@ -41,33 +44,16 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
         );
         if (response.ok) {
           const data = await response.json();
-          // Add cache busting to the thumbnail URL as well
-          return `${data.screen}${data.screen.includes("?") ? "&" : "?"
-            }t=${cacheBuster}`;
+          return data.screen;
         } else {
           throw new Error("Failed to fetch pre-signed URLs");
         }
       },
     });
-    const imageRef = useRef<HTMLImageElement>(null);
 
     const { uploadingCapId } = useUploadingContext();
 
-    useEffect(() => {
-      imageUrl.refetch();
-    }, [imageUrl.refetch, uploadingCapId]);
-
     const randomGradient = `linear-gradient(to right, ${generateRandomGrayScaleColor()}, ${generateRandomGrayScaleColor()})`;
-
-    const [imageStatus, setImageStatus] = useState<
-      "loading" | "error" | "success"
-    >("loading");
-
-    useEffect(() => {
-      if (imageRef.current?.complete && imageRef.current.naturalWidth != 0) {
-        setImageStatus("success");
-      }
-    }, []);
 
     return (
       <div
@@ -88,20 +74,17 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
             )
           )}
         </div>
+        
         {imageUrl.data && (
-          <Image
-            ref={imageRef}
+          <img
             src={imageUrl.data}
-            fill={true}
-            sizes="(max-width: 768px) 100vw, 33vw"
             alt={alt}
-            key={videoId}
-            style={{ objectFit: objectFit as any }}
             className={clsx(
-              "w-full h-full",
+              "absolute inset-0 w-full h-full",
               imageClass,
               imageStatus === "loading" && "opacity-0"
             )}
+            style={{ objectFit: objectFit as any }}
             onLoad={() => setImageStatus("success")}
             onError={() => setImageStatus("error")}
           />
@@ -110,3 +93,5 @@ export const VideoThumbnail: React.FC<VideoThumbnailProps> = memo(
     );
   }
 );
+
+VideoThumbnail.displayName = "VideoThumbnail";
